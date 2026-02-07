@@ -134,3 +134,12 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [Tokio](https://tokio.rs/) for async runtime
 - [Reqwest](https://github.com/seanmonstar/reqwest) for HTTP requests
 - [Warp](https://github.com/seanmonstar/warp) for the OAuth callback server
+
+## Useful commands
+
+```bash
+# Build for Linux GNU from MacOS (arm64)
+brew install zig
+cargo install cargo-zigbuild
+cargo zigbuild --target x86_64-unknown-linux-gnu --release
+```
