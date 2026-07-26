@@ -29,6 +29,10 @@ pub struct AzureService<'a> {
     pub tenant_id: &'a str,
     /// OAuth callback URL for redirection after authentication
     pub callback_url: &'a str,
+    /// Optional login hint (email address) for pre-filling the login form
+    pub login_hint: Option<&'a str>,
+    /// Optional domain hint for pre-selecting the domain
+    pub domain_hint: Option<&'a str>,
 }
 
 impl<'a> AzureService<'a> {
@@ -40,6 +44,8 @@ impl<'a> AzureService<'a> {
     /// * `client_secret` - The Azure application client secret
     /// * `tenant_id` - The Azure tenant ID
     /// * `callback_url` - The OAuth callback URL
+    /// * `login_hint` - Optional email address to pre-fill the login form
+    /// * `domain_hint` - Optional domain to pre-select in the login form
     ///
     /// # Returns
     ///
@@ -55,6 +61,40 @@ impl<'a> AzureService<'a> {
             client_secret,
             tenant_id,
             callback_url,
+            login_hint: None,
+            domain_hint: None,
+        }
+    }
+
+    /// Create a new instance of AzureService with login hints
+    ///
+    /// # Arguments
+    ///
+    /// * `client_id` - The Azure application client ID
+    /// * `client_secret` - The Azure application client secret
+    /// * `tenant_id` - The Azure tenant ID
+    /// * `callback_url` - The OAuth callback URL
+    /// * `login_hint` - Optional email address to pre-fill the login form
+    /// * `domain_hint` - Optional domain to pre-select in the login form
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - A new AzureService instance
+    pub fn with_hints(
+        client_id: &'a str,
+        client_secret: &'a str,
+        tenant_id: &'a str,
+        callback_url: &'a str,
+        login_hint: Option<&'a str>,
+        domain_hint: Option<&'a str>,
+    ) -> Self {
+        AzureService {
+            client_id,
+            client_secret,
+            tenant_id,
+            callback_url,
+            login_hint,
+            domain_hint,
         }
     }
 
@@ -95,10 +135,20 @@ impl<'a> AzureService<'a> {
 
         let scopes = "offline_access%20Mail.Send";
 
-        let auth_url = format!(
+        let mut auth_url = format!(
             "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize?client_id={}&response_type=code&redirect_uri={}&response_mode=query&scope={}",
             self.tenant_id, self.client_id, self.callback_url, scopes
         );
+
+        // Add login hint if provided
+        if let Some(hint) = self.login_hint {
+            auth_url.push_str(&format!("&login_hint={}", hint));
+        }
+
+        // Add domain hint if provided (fallback if login_hint doesn't work)
+        if let Some(domain) = self.domain_hint {
+            auth_url.push_str(&format!("&domain_hint={}", domain));
+        }
 
         info!(
             "Please open the following URL in your browser:\n{}",

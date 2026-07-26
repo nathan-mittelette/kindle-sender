@@ -26,13 +26,45 @@ pub async fn execute_send_command() -> Result<(), KindleError> {
 
     let config = config_result.unwrap();
 
-    // Initialize AzureService
-    let azure_service = AzureService::new(
-        &config.azure.client_id,
-        &config.azure.client_secret,
-        &config.azure.tenant_id,
-        &config.callback_uri,
-    );
+    // Initialize AzureService with login hints if provided
+    let azure_service = if let (Some(login_hint), Some(domain_hint)) = (
+        &config.azure.login_hint,
+        &config.azure.domain_hint,
+    ) {
+        AzureService::with_hints(
+            &config.azure.client_id,
+            &config.azure.client_secret,
+            &config.azure.tenant_id,
+            &config.callback_uri,
+            Some(login_hint),
+            Some(domain_hint),
+        )
+    } else if let Some(login_hint) = &config.azure.login_hint {
+        AzureService::with_hints(
+            &config.azure.client_id,
+            &config.azure.client_secret,
+            &config.azure.tenant_id,
+            &config.callback_uri,
+            Some(login_hint),
+            None,
+        )
+    } else if let Some(domain_hint) = &config.azure.domain_hint {
+        AzureService::with_hints(
+            &config.azure.client_id,
+            &config.azure.client_secret,
+            &config.azure.tenant_id,
+            &config.callback_uri,
+            None,
+            Some(domain_hint),
+        )
+    } else {
+        AzureService::new(
+            &config.azure.client_id,
+            &config.azure.client_secret,
+            &config.azure.tenant_id,
+            &config.callback_uri,
+        )
+    };
 
     // Initialize KindleService
     let kindle_service = KindleService::new(&config.receivers);

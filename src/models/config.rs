@@ -35,6 +35,12 @@ pub struct AzureConfig {
     pub client_secret: String,
     /// Azure tenant ID (often "common" for multi-tenant applications)
     pub tenant_id: String,
+    /// Optional login hint (email address) for pre-filling the Microsoft login form
+    #[serde(default)]
+    pub login_hint: Option<String>,
+    /// Optional domain hint for pre-selecting the domain in the Microsoft login form
+    #[serde(default)]
+    pub domain_hint: Option<String>,
 }
 
 impl Config {
