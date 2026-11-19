@@ -11,6 +11,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use log::info;
 use reqwest::Client;
@@ -116,6 +117,7 @@ impl<'a> AzureService<'a> {
         // Check if the auth file exists and read the token
         if let Ok(token_response) = Self::read_token_from_file(&auth_file_path) {
             if token_response.is_token_valid() {
+                Self::inspect_token(&token_response)?;
                 return Ok(token_response.access_token);
             } else if let Some(refresh_token) = &token_response.refresh_token {
                 let new_token_response =
@@ -129,6 +131,7 @@ impl<'a> AzureService<'a> {
                         message: format!("Error writing token to file: {}", e),
                     }
                 })?;
+                Self::inspect_token(&new_token_response)?;
                 return Ok(new_token_response.access_token);
             }
         }
@@ -195,6 +198,7 @@ impl<'a> AzureService<'a> {
             message: format!("Error writing token to file: {}", e),
         })?;
 
+        Self::inspect_token(&token_response)?;
         Ok(token_response.access_token)
     }
 
@@ -253,7 +257,7 @@ impl<'a> AzureService<'a> {
         let client = Client::new();
         let params = [
             ("client_id", self.client_id),
-            ("scope", "https://graph.microsoft.com/.default"),
+            ("scope", "Mail.Send%20offline_access"),
             ("refresh_token", refresh_token),
             ("grant_type", "refresh_token"),
             ("client_secret", self.client_secret),
@@ -271,6 +275,46 @@ impl<'a> AzureService<'a> {
             .await?;
 
         Ok(res)
+    }
+
+    /// Decode the payload of a JWT (no signature verification, display only)
+    fn decode_jwt_payload(token: &str) -> Result<serde_json::Value, Box<dyn Error>> {
+        let payload = token
+            .split('.')
+            .nth(1)
+            .ok_or("Invalid JWT: no payload segment")?;
+        let bytes = general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes)?;
+        Ok(value)
+    }
+
+    /// Log the identity (upn / preferred_username) and scopes carried by the
+    /// access token, and fail early if the Mail.Send scope is missing.
+    fn inspect_token(token_response: &TokenResponse) -> Result<(), KindleError> {
+        let claims =
+            Self::decode_jwt_payload(&token_response.access_token).map_err(|e| KindleError {
+                message: format!("Failed to decode access token: {}", e),
+            })?;
+
+        let identity = claims
+            .get("upn")
+            .or_else(|| claims.get("preferred_username"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>");
+        let scp = claims.get("scp").and_then(|v| v.as_str()).unwrap_or("");
+
+        info!("Token identity: {} | scopes: {}", identity, scp);
+
+        if !scp.split_whitespace().any(|s| s == "Mail.Send") {
+            return Err(KindleError {
+                message: format!(
+                    "Access token is missing the Mail.Send scope (scp: '{}'). \
+                     Delete ~/.kindle_sender/auth.json and re-authenticate.",
+                    scp
+                ),
+            });
+        }
+        Ok(())
     }
 
     /// Read a token from a file
